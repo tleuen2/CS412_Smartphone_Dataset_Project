@@ -1,11 +1,14 @@
 import numpy as np
 import pprint
 import pandas as pd
+import sklearn.preprocessing
 
 debug = True
 
 training_labels = np.genfromtxt('train.csv', delimiter = ",", usecols = -1, dtype = 'unicode', skip_header = 1, autostrip = True)
 training_data = np.genfromtxt('train.csv', delimiter = ",", skip_header = 1)[:,:-1]
+training_data = training_data[:,:-1] # strip an odd string from the data set
+training_data = training_data[:, 0:50] # throw away most of the data
 #print(train)
 
 # Data structure to hold sorted data
@@ -15,14 +18,19 @@ class phoneData:
         self.data_dict = {}
         self.mean_vectors = {}  
         self.covariance = {}
+        self.prior = {}
+        self.total_num_samples = 0
+        self.estimated_cov = {}
         
     def add_class(self, label):
         # Each label has its own array of values
         self.data_dict[label] = []
         self.mean_vectors[label] = []
         self.covariance[label] = []
+        self.estimated_cov[label] = []
 
     def add_row(self, label, row):
+        self.total_num_samples += 1
         # Stack the new row into our data array
         if len(self.data_dict[label]) >= 1:
             self.data_dict[label] = np.vstack((self.data_dict[label], row))
@@ -44,19 +52,91 @@ class phoneData:
             workspace = self.data_dict[label]
             for i in range(len(workspace[0])):
                 current_column = workspace[:,i]
-                current_sum = np.sum(current_column)
-                mean = current_sum / len(workspace[0])
-                self.mean_vectors[label].append(mean)
+                current_avg = np.average(current_column)
+                #mean = current_sum / len(workspace[0])
+                #print('this is the mean', current_avg)
+                self.mean_vectors[label].append(current_avg)
 
+    def estimate_covariances(self):
+        workspace = []
+        summation = []
+        current_mean_vector = []
+        row_minus_mean = []
+        proper_dim_row_minus_mean = []
+        transpose_row_minus_mean = []
+        product = []
+        for label in self.data_dict:
+            current_mean_vector = self.mean_vectors[label]
+            for row in self.data_dict[label]:
+                row_minus_mean = np.subtract(row, current_mean_vector)
+                proper_dim_row_minus_mean = np.array([row_minus_mean])
+                print('row - mean shape', proper_dim_row_minus_mean.shape)
+                transpose_row_minus_mean = np.transpose(proper_dim_row_minus_mean)
+                print('transpose row - mean shape', transpose_row_minus_mean.shape)
+                product = np.matmul(proper_dim_row_minus_mean, transpose_row_minus_mean)
+                print('shape of product', product.shape)
+                summation = np.add(summation, product)
+                
+            self.estimated_cov[label] = summation / len(self.data_dict[label][0])
+                
+        
     def calculate_covariances(self):
         workspace = []
+        transpose_workspace = []
         current_cov = []
         for label in self.covariance:
             workspace = self.data_dict[label]
-            workspace = np.transpose(workspace)
-            current_cov = np.cov(workspace)
+            workspace = workspace
+            #workspace = sklearn.preprocessing.normalize(workspace)
+            #transpose_workspace = np.transpose(workspace)
+            current_cov = np.cov(workspace, rowvar = False)
             self.covariance[label] = current_cov
+    
+    def calculate_piors(self):
+        num_of_samples_in_this_label = 0
+        for label in self.data_dict:
+            num_of_samples_in_this_label = len(self.data_dict[label][0])
+            self.prior[label] = num_of_samples_in_this_label / self.total_num_samples
+            print('prior for label ', label, ' is ' , self.prior[label])
             
+    def keyWithMaxVal(self, d):
+        v = list(d.values())
+        k = list(d.keys())
+        return k[v.index(max(v))]
+            
+    def calculate_discriminant(self, data_row):
+        current_mean_vector = []
+        current_cov = []
+        dimension = 0
+        row_minus_mean_vector = []
+        transpose_row_minus_mean_vector = []
+        inverse_cov = []
+        det_cov = 0
+        temp_discriminant = 0
+        discriminant_values = {}
+        for label in self.data_dict:
+            current_mean_vector = self.mean_vectors[label]
+            current_cov = self.covariance[label]
+            dimension = len(current_cov)
+            row_minus_mean_vector = np.subtract(data_row, current_mean_vector)
+            row_minus_mean_vector = np.array([row_minus_mean_vector])
+            transpose_row_minus_mean_vector = np.transpose(row_minus_mean_vector)
+            det_cov = np.linalg.det(current_cov)
+            if det_cov > 0:
+                inverse_cov = np.linalg.inv(current_cov)
+                first_mat_mul = np.matmul(inverse_cov, transpose_row_minus_mean_vector)
+                second_mat_mul = np.matmul(row_minus_mean_vector, first_mat_mul)
+                temp_discriminant = (-(dimension / 2) * np.log(2 * np.pi)) - \
+                    ((1 / 2) * np.log(det_cov)) - \
+                    ((1 / 2) * second_mat_mul) + \
+                    (np.log(self.prior[label]))
+            else:
+                temp_discriminant = 0
+                print('did not work')
+            discriminant_values[label] = temp_discriminant
+        #print(discriminant_values)
+        return self.keyWithMaxVal(discriminant_values)
+        
         
     def show_info(self):
         print('---------Info about data containter---------')
@@ -67,7 +147,8 @@ class phoneData:
             print('**Length of mean vector :', len(self.mean_vectors[j]), ' entries')
             print('**Shape of covariance matrix :', self.covariance[j].shape)
         print('---------Info about data containter---------')
-    
+
+        
 def seperate_by_class(labels, data):
     # each label is given in the last column of the data table
     # As such we need to divide the data baised on the values in the last column
@@ -83,8 +164,17 @@ def main():
     train_data = seperate_by_class(training_labels, training_data)
     train_data.calculate_mean_vector()
     train_data.calculate_covariances()
+    #train_data.estimate_covariances()
+    train_data.calculate_piors()
     train_data.show_info()
-    
+    total = 0
+    correct = 0
+    for i in range(len(training_data)):
+        total += 1
+        temp_val = train_data.calculate_discriminant(training_data[i])
+        if (temp_val == training_labels[i]):
+            correct += 1
+    print('Training score = ', ((correct / total) * 100))
 
 if __name__ == '__main__':
     main()
