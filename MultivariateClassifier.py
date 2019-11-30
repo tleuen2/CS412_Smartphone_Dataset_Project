@@ -1,26 +1,47 @@
 import numpy as np
-import pprint
-import pandas as pd
-import sklearn.preprocessing
 
-debug = True
+'''
+Multivariate Classifier for CS 412
 
+This script implements a multivariate classifier based on parameter estimation.
+The scrip classifies by using disciminant functions for each class, assigning
+a given data matrix to the class most likely given the discriminant methods. 
+Only one library is used, numpy.
+
+
+@author Thomas Leuenberger
+'''
+
+# Import Data
 training_labels = np.genfromtxt('train.csv', delimiter = ",", usecols = -1, dtype = 'unicode', skip_header = 1, autostrip = True)
 training_data = np.genfromtxt('train.csv', delimiter = ",", skip_header = 1)[:,:-1]
 training_data = training_data[:,:-1] # strip an odd string from the data set
 training_data = training_data[:, 0:50] # throw away most of the data
-#print(train)
+
+testing_labels = np.genfromtxt('test.csv', delimiter = ",", usecols = -1, dtype = 'unicode', skip_header = 1, autostrip = True)
+testing_data = np.genfromtxt('test.csv', delimiter = ",", skip_header = 1)[:,:-1]
+testing_data = training_data[:,:-1] # strip an odd string from the data set
+testing_data = training_data[:, 0:50] # throw away most of the data
 
 # Data structure to hold sorted data
 class phoneData:
 
-    def __init__(self):
+    def __init__(self, labels, data):
         self.data_dict = {}
         self.mean_vectors = {}  
         self.covariance = {}
         self.prior = {}
         self.total_num_samples = 0
         self.estimated_cov = {}
+        
+        for i in range(len(labels)):
+            if (self.should_class_be_added(labels[i]) == True):
+                self.add_class(labels[i])
+            self.add_row(labels[i], data[i])   
+            
+        self.calculate_mean_vector()
+        self.calculate_covariances()
+        self.calculate_piors()
         
     def add_class(self, label):
         # Each label has its own array of values
@@ -53,8 +74,6 @@ class phoneData:
             for i in range(len(workspace[0])):
                 current_column = workspace[:,i]
                 current_avg = np.average(current_column)
-                #mean = current_sum / len(workspace[0])
-                #print('this is the mean', current_avg)
                 self.mean_vectors[label].append(current_avg)
 
     def estimate_covariances(self):
@@ -87,8 +106,6 @@ class phoneData:
         for label in self.covariance:
             workspace = self.data_dict[label]
             workspace = workspace
-            #workspace = sklearn.preprocessing.normalize(workspace)
-            #transpose_workspace = np.transpose(workspace)
             current_cov = np.cov(workspace, rowvar = False)
             self.covariance[label] = current_cov
     
@@ -97,7 +114,6 @@ class phoneData:
         for label in self.data_dict:
             num_of_samples_in_this_label = len(self.data_dict[label][0])
             self.prior[label] = num_of_samples_in_this_label / self.total_num_samples
-            print('prior for label ', label, ' is ' , self.prior[label])
             
     def keyWithMaxVal(self, d):
         v = list(d.values())
@@ -132,9 +148,8 @@ class phoneData:
                     (np.log(self.prior[label]))
             else:
                 temp_discriminant = 0
-                print('did not work')
+                print('Singular Matrix! Results are no good')
             discriminant_values[label] = temp_discriminant
-        #print(discriminant_values)
         return self.keyWithMaxVal(discriminant_values)
         
         
@@ -148,33 +163,32 @@ class phoneData:
             print('**Shape of covariance matrix :', self.covariance[j].shape)
         print('---------Info about data containter---------')
 
-        
-def seperate_by_class(labels, data):
-    # each label is given in the last column of the data table
-    # As such we need to divide the data baised on the values in the last column
-    my_data = phoneData()
-    # There is an implict ordering of the parsed file...
-    for i in range(len(labels)):
-        if (my_data.should_class_be_added(labels[i]) == True):
-            my_data.add_class(labels[i])
-        my_data.add_row(labels[i], data[i])        
-    return my_data
 
 def main():
-    train_data = seperate_by_class(training_labels, training_data)
-    train_data.calculate_mean_vector()
-    train_data.calculate_covariances()
-    #train_data.estimate_covariances()
-    train_data.calculate_piors()
-    train_data.show_info()
-    total = 0
-    correct = 0
-    for i in range(len(training_data)):
-        total += 1
+    train_data = phoneData(training_labels, training_data)
+    #train_data.show_info()   
+
+    test_data = phoneData(testing_labels, testing_data)
+    #test_data.show_info()
+    
+    
+    train_total = 0
+    train_correct = 0
+    for i in range(len(training_labels)):
+        train_total += 1
         temp_val = train_data.calculate_discriminant(training_data[i])
         if (temp_val == training_labels[i]):
-            correct += 1
-    print('Training score = ', ((correct / total) * 100))
+            train_correct += 1
+    print('Training score = ', ((train_correct / train_total) * 100))
+    
+    test_total = 0
+    test_correct = 0
+    for i in range(len(testing_labels)):
+        test_total += 1
+        temp_val = test_data.calculate_discriminant(testing_data[i])
+        if (temp_val == testing_labels[i]):
+            test_correct += 1
+    print('Testing score = ', ((test_correct / test_total) * 100))
 
 if __name__ == '__main__':
     main()
