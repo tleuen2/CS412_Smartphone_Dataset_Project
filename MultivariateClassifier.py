@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.decomposition import PCA
 
 '''
 Multivariate Classifier for CS 412
@@ -12,16 +13,36 @@ Only one library is used, numpy.
 @author Thomas Leuenberger
 '''
 
-# Import Data
-training_labels = np.genfromtxt('train.csv', delimiter = ",", usecols = -1, dtype = 'unicode', skip_header = 1, autostrip = True)
-training_data = np.genfromtxt('train.csv', delimiter = ",", skip_header = 1)[:,:-1]
-training_data = training_data[:,:-1] # strip an odd string from the data set
-training_data = training_data[:, 0:50] # throw away most of the data
+# Flag for pca mode
+run_PCA = False
 
-testing_labels = np.genfromtxt('test.csv', delimiter = ",", usecols = -1, dtype = 'unicode', skip_header = 1, autostrip = True)
-testing_data = np.genfromtxt('test.csv', delimiter = ",", skip_header = 1)[:,:-1]
-testing_data = training_data[:,:-1] # strip an odd string from the data set
-testing_data = training_data[:, 0:50] # throw away most of the data
+if run_PCA == True:
+    # Import Data
+    pca = PCA(n_components = 50)
+    training_labels = np.genfromtxt('train.csv', delimiter=",", usecols=-1, dtype='unicode', skip_header=1, autostrip=True)
+    training_data = np.genfromtxt('train.csv', delimiter=",", skip_header=1)[:, :-1]
+    training_data = training_data[:, :-1]  # strip an odd string from the data set
+    pca.fit(training_data)
+    training_data = pca.transform(training_data)
+    training_data = training_data[:, 0:50]  # throw away most of the data
+    
+    testing_labels = np.genfromtxt('test.csv', delimiter=",", usecols=-1, dtype='unicode', skip_header=1, autostrip=True)
+    testing_data = np.genfromtxt('test.csv', delimiter=",", skip_header=1)[:, :-1]
+    testing_data = testing_data[:, :-1]  # strip an odd string from the data set
+    pca.fit(testing_data)
+    testing_data = pca.transform(testing_data)
+    testing_data = testing_data[:, 0:50]  # throw away most of the data
+else:
+    # Import Data
+    training_labels = np.genfromtxt('train.csv', delimiter = ",", usecols = -1, dtype = 'unicode', skip_header = 1, autostrip = True)
+    training_data = np.genfromtxt('train.csv', delimiter = ",", skip_header = 1)[:,:-1]
+    training_data = training_data[:,:-1] # strip an odd string from the data set
+    training_data = training_data[:, 0:50] # throw away most of the data
+
+    testing_labels = np.genfromtxt('test.csv', delimiter = ",", usecols = -1, dtype = 'unicode', skip_header = 1, autostrip = True)
+    testing_data = np.genfromtxt('test.csv', delimiter = ",", skip_header = 1)[:,:-1]
+    testing_data = testing_data[:,:-1] # strip an odd string from the data set
+    testing_data = testing_data[:, 0:50] # throw away most of the data
 
 # Data structure to hold sorted data
 class phoneData:
@@ -38,7 +59,7 @@ class phoneData:
             if (self.should_class_be_added(labels[i]) == True):
                 self.add_class(labels[i])
             self.add_row(labels[i], data[i])   
-            
+        
         self.calculate_mean_vector()
         self.calculate_covariances()
         self.calculate_piors()
@@ -152,6 +173,14 @@ class phoneData:
             discriminant_values[label] = temp_discriminant
         return self.keyWithMaxVal(discriminant_values)
         
+    def getCov(self):
+        return self.covariance
+        
+    def getMean(self):
+        return self.mean_vectors
+        
+    def getPrior(self):
+        return self.prior
         
     def show_info(self):
         print('---------Info about data containter---------')
@@ -165,10 +194,11 @@ class phoneData:
 
 
 def main():
+
     train_data = phoneData(training_labels, training_data)
     #train_data.show_info()   
 
-    test_data = phoneData(testing_labels, testing_data)
+    #test_data = phoneData(testing_labels, testing_data)
     #test_data.show_info()
     
     
@@ -185,7 +215,7 @@ def main():
     test_correct = 0
     for i in range(len(testing_labels)):
         test_total += 1
-        temp_val = test_data.calculate_discriminant(testing_data[i])
+        temp_val = train_data.calculate_discriminant(testing_data[i])
         if (temp_val == testing_labels[i]):
             test_correct += 1
     print('Testing score = ', ((test_correct / test_total) * 100))
