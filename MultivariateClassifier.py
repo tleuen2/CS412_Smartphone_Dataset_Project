@@ -17,6 +17,7 @@ Only one library is used, numpy.
 run_PCA = False
 
 if run_PCA == True:
+    #PCA section written by @Rohit Saikrishnan
     # Import Data
     pca = PCA(n_components = 50)
     training_labels = np.genfromtxt('train.csv', delimiter=",", usecols=-1, dtype='unicode', skip_header=1, autostrip=True)
